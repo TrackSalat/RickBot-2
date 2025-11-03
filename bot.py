@@ -444,7 +444,10 @@ _ptb_app: Optional[Application] = None
 async def _startup():
     global _ptb_app
     ensure_data_file()
-    _ptb_app = Application.builder().token(BOT_TOKEN).build()
+    # було:
+    # _ptb_app = Application.builder().token(BOT_TOKEN).build()
+    # стало (вимикаємо Updater для вебхука):
+    _ptb_app = Application.builder().token(BOT_TOKEN).updater(None).build()
     register_handlers(_ptb_app)
     await post_init(_ptb_app)
     await _ptb_app.initialize()
@@ -454,6 +457,7 @@ async def _startup():
     secret = os.getenv("WEBHOOK_SECRET", "secret")
     if base_url:
         await _ptb_app.bot.set_webhook(f"{base_url}/webhook/{secret}")
+
 
 @app.on_event("shutdown")
 async def _shutdown():
