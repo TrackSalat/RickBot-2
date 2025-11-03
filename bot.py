@@ -1,5 +1,6 @@
 import os, json
 from datetime import datetime, timedelta
+import pytz
 from typing import List, Dict, Any, Optional
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, BotCommand, InputMediaPhoto, Update as TGUpdate
@@ -20,11 +21,14 @@ STATS_CAT, STATS_RANGE = 30, 31
 MONTHS_UA = ["Січня","Лютого","Березня","Квітня","Травня","Червня",
              "Липня","Серпня","Вересня","Жовтня","Листопада","Грудня"]
 
-def fmt_dt_uk(dt: datetime) -> str:
-    return f"{dt.day} {MONTHS_UA[dt.month-1]} {dt.hour:02d}:{dt.minute:02d}"
+TZ = pytz.timezone("Europe/Madrid")  # або "Europe/Kyiv", якщо хочеш
 
 def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
+    return datetime.now(TZ).strftime("%Y-%m-%d %H:%M")
+
+def fmt_dt_uk(dt: datetime) -> str:
+    dt = dt.astimezone(TZ)
+    return f"{dt.day} {MONTHS_UA[dt.month-1]} {dt.hour:02d}:{dt.minute:02d}"
 
 def fmt_minutes(total_min: int) -> str:
     h = total_min // 60
@@ -160,13 +164,13 @@ async def eat_amount(update, ctx):
     if not raw.isdigit(): await update.message.reply_text("Введи число, напр. 180"); return EAT_AMOUNT
     ml = int(raw)
     eid = append_item({"type":"eat","food":"-","amount":str(ml),"time":now_str()})
-    sent = await update.message.reply_text(f"✅ Суміш, {ml} мл — {fmt_dt_uk(datetime.now())}", reply_markup=MAIN_KB)
+    sent = await update.message.reply_text(f"✅ Суміш, {ml} мл — {fmt_dt_uk(datetime.now(TZ))}", reply_markup=MAIN_KB)
     link_both(update, sent.message_id, eid); ctx.user_data.clear(); return ConversationHandler.END
 async def eat_food(update, ctx):
     food = (update.message.text or "").strip()
     if not food or food.startswith("/"): await update.message.reply_text("Скасовано.", reply_markup=MAIN_KB); return ConversationHandler.END
     eid = append_item({"type":"eat","food":food,"amount":"-","time":now_str()})
-    sent = await update.message.reply_text(f"✅ Прикорм — {food} — {fmt_dt_uk(datetime.now())}", reply_markup=MAIN_KB)
+    sent = await update.message.reply_text(f"✅ Прикорм — {food} — {fmt_dt_uk(datetime.now(TZ))}", reply_markup=MAIN_KB)
     link_both(update, sent.message_id, eid); ctx.user_data.clear(); return ConversationHandler.END
 
 # /sleep
@@ -180,7 +184,7 @@ async def sleep_choice(update, ctx):
     t = (update.message.text or "").lower(); now_iso = now_str()
     if "зас" in t:
         eid = append_item({"type":"sleep","action":"sleep_start","time":now_iso})
-        sent = await update.message.reply_text(f"😴 Заснув — {fmt_dt_uk(datetime.now())}", reply_markup=MAIN_KB)
+        sent = await update.message.reply_text(f"😴 Заснув — {fmt_dt_uk(datetime.now(TZ))}", reply_markup=MAIN_KB)
         link_both(update, sent.message_id, eid); return ConversationHandler.END
     if "про" in t:
         d = load_data(); s = last_sleep_start(d)
@@ -190,7 +194,7 @@ async def sleep_choice(update, ctx):
             link_both(update, sent.message_id, eid); return ConversationHandler.END
         st = parse_dt(s["time"]); en = parse_dt(now_iso)
         mins = max(0, int((en-st).total_seconds()/60))
-        sent = await update.message.reply_text(f"🌞 Прокинувся — {fmt_dt_uk(datetime.now())}\n🕒 {fmt_minutes(mins)}", reply_markup=MAIN_KB)
+        sent = await update.message.reply_text(f"🌞 Прокинувся — {fmt_dt_uk(datetime.now(TZ))}\n🕒 {fmt_minutes(mins)}", reply_markup=MAIN_KB)
         link_both(update, sent.message_id, eid); return ConversationHandler.END
     if "запис" in t:
         await update.message.reply_text("О котрій заснув?", reply_markup=ReplyKeyboardRemove()); return SLEEP_REC_START
@@ -239,7 +243,7 @@ def period_label(days:int)->str:
     return "Сьогодні" if days==1 else ("останні 7 днів" if days==7 else "останні 30 днів")
 
 def filter_since(days: int):
-    now = datetime.now()
+    now = datetime.now(TZ)
     return day_start(now) if days==1 else day_start(now) - timedelta(days=days-1)
 
 def build_eat_stats(days: int) -> str:
@@ -300,9 +304,9 @@ def build_sleep_stats(days:int)->str:
         if x.get("action")=="sleep_start": last_start=parse_dt(x["time"])
         if x.get("action")=="sleep_end":   last_end=parse_dt(x["time"])
     if last_end and (not last_start or last_end>last_start):
-        mins=int((datetime.now()-last_end).total_seconds()//60); lines.append(f"⏱️ Востаннє спав: {fmt_minutes(mins)} тому")
+        mins=int((datetime.now(TZ)-last_end).total_seconds()//60); lines.append(f"⏱️ Востаннє спав: {fmt_minutes(mins)} тому")
     elif last_start and (not last_end or last_start>last_end):
-        mins=int((datetime.now()-last_start).total_seconds()//60); lines.append(f"⏱️ Зараз спить: {fmt_minutes(mins)}")
+        mins=int((datetime.now(TZ)-last_start).total_seconds()//60); lines.append(f"⏱️ Зараз спить: {fmt_minutes(mins)}")
     return "\n".join(lines)
 
 async def send_poop_photos_for_period(update, ctx, days:int):
